@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Arm Calibrator</title>
+<style>
+  :root {
+    --bg:#0f1117; --bg2:#161b27; --bg3:#1e2535;
+    --border:#2a3148; --border2:#3a4460;
+    --text:#e2e8f5; --text2:#8892a4; --text3:#4a5568;
+    --accent:#4f8ef7; --accent-bg:#1a2d52;
+    --danger:#f75555; --danger-bg:#2d1a1a;
+    --success:#4fd17a; --success-bg:#1a2d24;
+    --warn:#f7a94f; --warn-bg:#2d2010;
+    --purple:#a78bfa; --purple-bg:#1e1a35;
+    --radius:8px; --radius-lg:12px;
+    --mono:'JetBrains Mono','Fira Code','Consolas',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;min-height:100vh;}
+
+  .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;}
+  .header-title{font-size:15px;font-weight:700;letter-spacing:.04em;}
+  .header-sub{font-size:10px;color:var(--text3);letter-spacing:.07em;text-transform:uppercase;margin-top:1px;}
+  .header-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
+
+  .ws-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:9px 24px;display:flex;align-items:center;gap:10px;font-size:12px;}
+  .ws-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);transition:background .3s;flex-shrink:0;}
+  .ws-dot.connected{background:var(--success);box-shadow:0 0 6px var(--success);}
+  .ws-dot.connecting{background:var(--warn);}
+  .ws-dot.error{background:var(--danger);}
+  .ws-url{font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;color:var(--text);width:210px;outline:none;}
+  .ws-url:focus{border-color:var(--accent);}
+  #ws-status{min-width:90px;color:var(--text2);}
+  #ws-sent{margin-left:auto;color:var(--text3);font-size:11px;}
+
+  .main{display:flex;height:calc(100vh - 90px);}
+  .sidebar{width:200px;background:var(--bg2);border-right:1px solid var(--border);padding:14px 0;flex-shrink:0;overflow-y:auto;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;cursor:pointer;color:var(--text2);font-size:12px;border-left:2px solid transparent;transition:all .15s;user-select:none;}
+  .nav-item:hover{background:var(--bg3);color:var(--text);}
+  .nav-item.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-bg);}
+  .nav-icon{font-size:13px;width:18px;text-align:center;}
+  .nav-sep{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:12px 18px 4px;}
+
+  .content{flex:1;overflow-y:auto;padding:18px 22px;}
+  .tab-content{display:none;}
+  .tab-content.active{display:block;}
+
+  .panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:15px 17px;margin-bottom:12px;}
+  .panel-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+
+  /* Servo rows */
+  .servo-row{display:grid;grid-template-columns:115px 30px 1fr 30px 55px 68px;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border);}
+  .servo-row:last-child{border-bottom:none;}
+  .servo-name{font-size:13px;font-weight:600;}
+  .servo-sub{font-size:10px;color:var(--text3);margin-top:1px;}
+  input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--border2);border-radius:2px;outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;transition:transform .1s;}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
+  .nudge{width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-size:16px;color:var(--text2);user-select:none;transition:all .1s;}
+  .nudge:hover{border-color:var(--accent);color:var(--accent);}
+  .nudge:active{transform:scale(0.9);}
+  .val-box{text-align:right;font-weight:700;color:var(--accent);font-size:13px;}
+  .pulse-box{text-align:right;color:var(--text3);font-size:10px;}
+
+  /* Slew speed bar */
+  .slew-bar{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;}
+  .slew-label{font-size:12px;color:var(--text2);min-width:90px;}
+  .slew-val{font-size:13px;font-weight:700;color:var(--warn);min-width:80px;}
+  .slew-desc{font-size:11px;color:var(--text3);}
+
+  /* Buttons */
+  .btn{padding:7px 13px;font-size:12px;font-family:var(--mono);font-weight:600;border:1px solid var(--border2);background:var(--bg3);color:var(--text);border-radius:var(--radius);cursor:pointer;transition:all .15s;white-space:nowrap;}
+  .btn:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-accent{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);}
+  .btn-accent:hover{background:var(--accent);color:var(--bg);}
+  .btn-danger{border-color:var(--danger);color:var(--danger);background:var(--danger-bg);}
+  .btn-danger:hover{background:var(--danger);color:var(--bg);}
+  .btn-success{border-color:var(--success);color:var(--success);background:var(--success-bg);}
+  .btn-success:hover{background:var(--success);color:var(--bg);}
+  .btn-warn{border-color:var(--warn);color:var(--warn);background:var(--warn-bg);}
+  .btn-warn:hover{background:var(--warn);color:var(--bg);}
+  .btn-purple{border-color:var(--purple);color:var(--purple);background:var(--purple-bg);}
+  .btn-purple:hover{background:var(--purple);color:var(--bg);}
+  .row-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+
+  /* Manual board calibration */
+  .board-calib-wrap{display:flex;gap:20px;flex-wrap:wrap;}
+  .board-grid-wrap{flex-shrink:0;}
+  .board-grid{display:grid;grid-template-columns:repeat(8,44px);grid-template-rows:repeat(8,44px);gap:2px;width:fit-content;}
+  .sq{width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:9px;font-weight:700;border-radius:4px;cursor:pointer;transition:all .12s;border:1px solid transparent;user-select:none;}
+  .sq:hover{transform:scale(1.06);z-index:2;}
+  .sq.light{background:#2a3545;color:#4a6080;}
+  .sq.dark{background:#1e2a38;color:#2a4060;}
+  .sq.saved{background:var(--success-bg)!important;color:var(--success)!important;border-color:var(--success)!important;}
+  .sq.active-sq{background:var(--accent-bg)!important;color:var(--accent)!important;border-color:var(--accent)!important;border-width:2px;}
+  .sq.unsaved{background:var(--warn-bg)!important;color:var(--warn)!important;border-color:var(--border)!important;}
+  .sq-dot{width:5px;height:5px;border-radius:50%;margin-top:2px;}
+  .sq.saved .sq-dot{background:var(--success);}
+  .sq.active-sq .sq-dot{background:var(--accent);}
+
+  .sq-detail{flex:1;min-width:220px;}
+  .sq-detail-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;}
+  .sq-detail-vals{font-size:11px;color:var(--text3);line-height:1.9;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;min-height:60px;margin-bottom:10px;}
+  .sq-nav-btns{display:flex;gap:6px;margin-bottom:8px;}
+
+  /* Progress ring */
+  .calib-progress{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;}
+  .calib-count{font-size:22px;font-weight:700;color:var(--accent);}
+  .calib-of{font-size:12px;color:var(--text3);}
+  .calib-bar-wrap{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .calib-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s;}
+
+  /* Zone cards */
+  .zone-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;}
+  .zone-card.saved{border-color:var(--warn);}
+  .zone-title{font-size:12px;font-weight:700;margin-bottom:6px;}
+  .zone-vals{font-size:10px;color:var(--text3);line-height:1.7;font-family:var(--mono);}
+
+  /* Sequencer */
+  .seq-step{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;font-size:12px;position:relative;overflow:hidden;}
+  .seq-step .step-bar{position:absolute;left:0;top:0;height:100%;background:var(--accent);opacity:.08;transition:width .3s;}
+  .seq-step.running{border-color:var(--accent);}
+  .seq-step.done{border-color:var(--success);opacity:.7;}
+  .seq-step.pending{opacity:.45;}
+  .seq-num{width:22px;height:22px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;color:var(--text3);}
+  .seq-step.running .seq-num{border-color:var(--accent);color:var(--accent);}
+  .seq-step.done .seq-num{border-color:var(--success);color:var(--success);background:var(--success-bg);}
+  .seq-label{flex:1;}
+  .seq-sub{font-size:10px;color:var(--text3);}
+  .progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:8px;}
+  .progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;width:0%;}
+
+  .move-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+  .move-type-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;cursor:pointer;transition:all .15s;font-size:11px;text-align:center;}
+  .move-type-card:hover{border-color:var(--border2);}
+  .move-type-card.active{border-color:var(--purple);background:var(--purple-bg);color:var(--purple);}
+  .move-type-icon{font-size:18px;display:block;margin-bottom:4px;}
+  .move-input{font-family:var(--mono);font-size:13px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;color:var(--text);outline:none;width:90px;text-align:center;text-transform:uppercase;}
+  .move-input:focus{border-color:var(--accent);}
+
+  /* Safe zones */
+  .safe-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .safe-label{width:100px;font-size:12px;color:var(--text2);}
+  .safe-input{width:54px;padding:5px 7px;font-size:12px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);text-align:center;outline:none;}
+  .safe-input:focus{border-color:var(--accent);}
+  .safe-bar{flex:1;height:6px;background:var(--bg3);border-radius:3px;position:relative;}
+  .safe-range{position:absolute;height:100%;border-radius:3px;background:var(--accent);opacity:.4;transition:all .2s;}
+
+  .code-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:13px 15px;font-size:11px;line-height:1.7;color:#a8c0e0;max-height:460px;overflow-y:auto;white-space:pre;}
+  .log-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:9px 11px;font-size:11px;line-height:1.7;color:var(--text3);max-height:140px;overflow-y:auto;}
+  .log-send{color:var(--accent);} .log-ok{color:var(--success);} .log-err{color:var(--danger);} .log-info{color:var(--text2);} .log-seq{color:var(--purple);}
+
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .chip{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:7px 13px;font-size:11px;}
+  .chip-val{font-size:17px;font-weight:700;color:var(--accent);display:block;margin-top:2px;}
+  .divider{border:none;border-top:1px solid var(--border);margin:11px 0;}
+  .status-bar{font-size:11px;color:var(--text3);margin-top:7px;}
+  ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-track{background:var(--bg2);} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+  .timing-table{width:100%;border-collapse:collapse;font-size:12px;}
+  .timing-table th{text-align:left;padding:6px 10px;color:var(--text3);font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border);}
+  .timing-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);}
+  .timing-table tr:last-child td{border-bottom:none;}
+  .timing-table input[type=number]{width:65px;padding:4px 7px;font-size:12px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center;outline:none;}
+  .timing-table input:focus{border-color:var(--accent);}
+
+  .info-box{background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:12px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">⬡ CHESS ARM CALIBRATOR</div>
+    <div class="header-sub">5-DOF · MG995×3 · SG90×3 · Raspberry Pi Pico</div>
+  </div>
+  <div class="header-right">
+    <button class="btn" onclick="exportJSON()">Export JSON</button>
+    <button class="btn" onclick="importConfig()">Import JSON</button>
+    <button class="btn btn-accent" onclick="generateCode();setNav('code')">Pico Code ↗</button>
+  </div>
+</div>
+
+<div class="ws-bar">
+  <div class="ws-dot" id="ws-dot"></div>
+  <span id="ws-status">Disconnected</span>
+  <input class="ws-url" id="ws-url" value="ws://localhost:8768"/>
+  <button class="btn btn-accent" onclick="wsConnect()">Connect</button>
+  <button class="btn" onclick="wsDisconnect()">Disconnect</button>
+  <span id="ws-sent">—</span>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="nav-sep">Calibration</div>
+    <div class="nav-item active" onclick="setNav('servos')" id="nav-servos"><span class="nav-icon">⚙</span>Servo Control</div>
+    <div class="nav-item" onclick="setNav('board')" id="nav-board"><span class="nav-icon">⊞</span>Board Squares</div>
+    <div class="nav-item" onclick="setNav('zones')" id="nav-zones"><span class="nav-icon">⚑</span>Special Zones</div>
+    <div class="nav-item" onclick="setNav('safe')" id="nav-safe"><span class="nav-icon">🛡</span>Safe Limits</div>
+    <div class="nav-sep">Movement</div>
+    <div class="nav-item" onclick="setNav('slew')" id="nav-slew"><span class="nav-icon">〜</span>Slew Speed</div>
+    <div class="nav-item" onclick="setNav('sequence')" id="nav-sequence"><span class="nav-icon">▶</span>Sequencer</div>
+    <div class="nav-sep">Game</div>
+    <div class="nav-item" onclick="setNav('game')" id="nav-game"><span class="nav-icon">&#9822;</span>Live Game</div>
+    <div class="nav-sep">Export</div>
+    <div class="nav-item" onclick="setNav('code')" id="nav-code"><span class="nav-icon">&lt;/&gt;</span>Pico Code</div>
+  </div>
+
+  <div class="content">
+
+    <!-- SERVO CONTROL -->
+    <div class="tab-content active" id="tab-servos">
+      <div class="panel">
+        <div class="panel-title">MG995 — Base · Shoulder · Elbow</div>
+        <div id="mg-servos"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">SG90 — Wrist Pitch · Wrist Roll · Gripper</div>
+        <div id="sg-servos"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Quick Positions</div>
+        <div class="row-btns">
+          <button class="btn" onclick="gotoZoneSlow('rest')">↺ Rest</button>
+          <button class="btn" onclick="gotoPreset('center')">⊙ Center All</button>
+          <button class="btn btn-danger" onclick="gotoPreset('zero')">⊘ Zero (90°)</button>
+        </div>
+        <div class="status-bar" id="pose-status">Ready — sliders send smooth slewed movement</div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Serial Log</div>
+        <div class="log-box" id="log-box"><div class="log-info">Waiting for WebSocket connection...</div></div>
+      </div>
+    </div>
+
+    <!-- BOARD SQUARES — manual calibration -->
+    <div class="tab-content" id="tab-board">
+      <div class="info-box">
+        ⚠ <b>Manual calibration mode.</b> Click a square → physically position the arm over it using the Servo Control tab → click <b>Save This Square</b>. Work row by row. You can skip squares and come back.
+      </div>
+      <div class="calib-progress">
+        <div>
+          <div class="calib-count" id="saved-count">0</div>
+          <div class="calib-of">of 64 saved</div>
+        </div>
+        <div class="calib-bar-wrap"><div class="calib-bar-fill" id="calib-bar" style="width:0%"></div></div>
+        <button class="btn btn-danger" onclick="clearAllSquares()" style="font-size:11px">Clear All</button>
+        <button class="btn" onclick="exportSquares()" style="font-size:11px">Export</button>
+      </div>
+      <div class="board-calib-wrap">
+        <div class="board-grid-wrap">
+          <div style="display:flex;gap:2px;margin-bottom:2px;padding-left:0px;">
+            <div style="width:44px"></div>
+            <!-- rank labels added by JS -->
+          </div>
+          <div style="display:flex;gap:4px;">
+            <div id="rank-labels" style="display:flex;flex-direction:column;gap:2px;justify-content:center;"></div>
+            <div class="board-grid" id="board-grid"></div>
+          </div>
+          <div id="file-labels" style="display:flex;gap:2px;margin-top:4px;padding-left:4px;"></div>
+        </div>
+        <div class="sq-detail" id="sq-detail">
+          <div class="sq-detail-title" id="sq-detail-title">Select a square</div>
+          <div class="sq-detail-vals" id="sq-detail-vals">—</div>
+          <div class="sq-nav-btns">
+            <button class="btn" onclick="navSquare(-1)" title="Previous square">← Prev</button>
+            <button class="btn" onclick="navSquare(1)" title="Next square">Next →</button>
+            <button class="btn" onclick="gotoSavedSquare()" title="Move arm to saved position">Go ↗</button>
+          </div>
+          <div class="row-btns">
+            <button class="btn btn-success" onclick="saveActiveSquare()">✓ Save This Square</button>
+            <button class="btn btn-danger" onclick="clearActiveSquare()">✕ Clear</button>
+          </div>
+          <div class="status-bar" id="board-status">Click any square on the grid</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SPECIAL ZONES -->
+    <div class="tab-content" id="tab-zones">
+      <div class="panel">
+        <div class="panel-title">Rest / Safe Home</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Arm returns here (slowly) between every move.</p>
+        <div class="zone-card" id="rest-card" style="border-color:var(--success)">
+          <div class="zone-title" style="color:var(--success)">⌂ Rest Position</div>
+          <div class="zone-vals" id="rest-vals">Not saved</div>
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-success" onclick="saveZone('rest')">Save Current as Rest</button>
+          <button class="btn" onclick="gotoZoneSlow('rest')">↺ Go to Rest (slow)</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Capture Zone</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Outside the board — where captured pieces are dropped.</p>
+        <div class="zone-card" id="capture-card">
+          <div class="zone-title" style="color:var(--warn)">⚔ Capture Zone</div>
+          <div class="zone-vals" id="capture-vals">Not saved</div>
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-warn" onclick="saveZone('capture')">Save Current as Capture Zone</button>
+          <button class="btn" onclick="gotoZoneSlow('capture')">Go to Capture Zone</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Piece Reserve Zone</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Where replacement pieces are stored for pawn promotion.</p>
+        <div class="zone-card" id="reserve-card">
+          <div class="zone-title" style="color:var(--purple)">♛ Reserve Zone</div>
+          <div class="zone-vals" id="reserve-vals">Not saved</div>
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-purple" onclick="saveZone('reserve')">Save Current as Reserve Zone</button>
+          <button class="btn" onclick="gotoZoneSlow('reserve')">Go to Reserve Zone</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SAFE LIMITS -->
+    <div class="tab-content" id="tab-safe">
+      <div class="panel">
+        <div class="panel-title">Hard Travel Limits per Servo</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">Every movement — sliders, slewing, sequences — is clamped to these ranges.</p>
+        <div id="safe-zones"></div>
+      </div>
+    </div>
+
+    <!-- SLEW SPEED -->
+    <div class="tab-content" id="tab-slew">
+      <div class="panel">
+        <div class="panel-title">Smooth Slew — Shoulder Slam Fix</div>
+        <div class="info-box">
+          Every servo now moves <b>one degree at a time</b> at a controlled speed instead of jumping to the target angle instantly. This prevents the shoulder from slamming. Lower ms/° = faster. Higher = smoother/slower.
+        </div>
+        <table class="timing-table">
+          <thead><tr><th>Servo</th><th>Type</th><th>ms / degree</th><th>Delay after (ms)</th></tr></thead>
+          <tbody id="timing-tbody"></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Gripper Settings</div>
+        <div class="safe-row" style="margin-top:4px">
+          <div class="safe-label">Open angle</div>
+          <input class="safe-input" id="grip-open" type="number" value="10" min="0" max="90"> <span style="font-size:11px;color:var(--text3)">°</span>
+        </div>
+        <div class="safe-row">
+          <div class="safe-label">Close angle</div>
+          <input class="safe-input" id="grip-close" type="number" value="60" min="0" max="90"> <span style="font-size:11px;color:var(--text3)">°</span>
+        </div>
+        <div class="safe-row">
+          <div class="safe-label">Grip ms/°</div>
+          <input class="safe-input" id="grip-speed" type="number" value="30" min="5" max="300"> <span style="font-size:11px;color:var(--text3)">ms per degree (slow)</span>
+        </div>
+        <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;">Tip: gripper should be much slower than other servos (20–40 ms/°) to avoid knocking pieces.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Test Slew</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Move a servo slowly to a target angle to verify the slew feels right.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="slew-test-servo" style="font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;color:var(--text);outline:none;">
+            <option value="base">Base</option><option value="shldr">Shoulder</option><option value="elbow">Elbow</option>
+            <option value="wrpitch">Wrist Pitch</option><option value="wrroll">Wrist Roll</option><option value="grip">Gripper</option>
+          </select>
+          <span style="font-size:12px;color:var(--text2)">→</span>
+          <input type="number" id="slew-test-angle" value="90" min="0" max="180" style="width:65px;padding:6px 8px;font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);text-align:center;outline:none;">
+          <span style="font-size:12px;color:var(--text2)">°</span>
+          <button class="btn btn-accent" onclick="testSlew()">Slew Now</button>
+        </div>
+        <div class="status-bar" id="slew-test-status">Ready</div>
+      </div>
+    </div>
+
+    <!-- SEQUENCER -->
+    <div class="tab-content" id="tab-sequence">
+      <div class="panel">
+        <div class="panel-title">Move Type</div>
+        <div class="move-type-grid">
+          <div class="move-type-card active" onclick="setMoveType('normal')" id="mt-normal"><span class="move-type-icon">♟</span>Normal</div>
+          <div class="move-type-card" onclick="setMoveType('capture')" id="mt-capture"><span class="move-type-icon">⚔</span>Capture</div>
+          <div class="move-type-card" onclick="setMoveType('castle')" id="mt-castle"><span class="move-type-icon">♜</span>Castling</div>
+          <div class="move-type-card" onclick="setMoveType('enpassant')" id="mt-enpassant"><span class="move-type-icon">↗</span>En Passant</div>
+          <div class="move-type-card" onclick="setMoveType('promote')" id="mt-promote"><span class="move-type-icon">♛</span>Promotion</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Squares</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">From</div><input class="move-input" id="from-sq" placeholder="e2" maxlength="2"/></div>
+          <div style="font-size:20px;color:var(--text3);padding-bottom:8px">→</div>
+          <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">To</div><input class="move-input" id="to-sq" placeholder="e4" maxlength="2"/></div>
+          <div id="extra-sq-wrap" style="display:none"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em" id="extra-sq-label">Extra</div><input class="move-input" id="extra-sq" placeholder="—" maxlength="2"/></div>
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-accent" onclick="runMoveSequence()">▶ Execute Move</button>
+          <button class="btn btn-danger" onclick="stopSequence()">■ Stop</button>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="status-bar" id="seq-status">Ready</div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Step Log</div>
+        <div id="seq-steps"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Move Logic</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.9;">
+          <b style="color:var(--text)">Normal:</b> Rest→From(pick)→Rest→To(place)→Rest<br>
+          <b style="color:var(--text)">Capture:</b> Rest→To(pick captured)→CaptureZone→Rest→From(pick)→To(place)→Rest<br>
+          <b style="color:var(--text)">Castling:</b> Rook first, then King<br>
+          <b style="color:var(--text)">En Passant:</b> Remove passed pawn sideways, then move own pawn<br>
+          <b style="color:var(--text)">Promotion:</b> Pawn to capture zone, pick from reserve, place
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVE GAME -->
+    <div class="tab-content" id="tab-game">
+      <div class="panel">
+        <div class="panel-title">Live Game Status</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <div id="game-ws-dot" style="width:10px;height:10px;border-radius:50%;background:var(--color-border-secondary)"></div>
+          <span id="game-ws-label" style="font-size:12px;color:var(--color-text-secondary)">Waiting for move command...</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px;">
+            <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;">Last received</div>
+            <div id="game-last-cmd" style="font-size:13px;font-weight:500;font-family:var(--font-mono)">—</div>
+          </div>
+          <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px;">
+            <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;">Arm status</div>
+            <div id="game-arm-status" style="font-size:13px;font-weight:500;">Idle</div>
+          </div>
+        </div>
+        <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px;margin-bottom:12px;">
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;">Move steps</div>
+          <div id="game-steps" style="font-size:12px;font-family:var(--font-mono);line-height:1.9;color:var(--color-text-secondary);min-height:40px;">—</div>
+        </div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;">Squares loaded: <strong id="game-sq-count">0</strong> &nbsp;|&nbsp; Rest zone: <strong id="game-rest-status">not set</strong></div>
+        <div class="row-btns">
+          <button class="btn btn-danger" onclick="stopCurrentMove()">&#9632; Stop Move</button>
+          <button class="btn" onclick="testRestPosition()">&#8617; Go to Rest</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Move Log</div>
+        <div id="game-log" style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px;font-size:11px;font-family:var(--font-mono);line-height:1.7;max-height:200px;overflow-y:auto;color:var(--color-text-secondary);">Ready</div>
+      </div>
+    </div>
+
+    <!-- PICO CODE -->
+    <div class="tab-content" id="tab-code">
+      <div class="panel">
+        <div class="panel-title">Generated MicroPython</div>
+        <pre class="code-box" id="code-output">Click "Pico Code" to generate.</pre>
+        <div class="row-btns">
+          <button class="btn" onclick="generateCode()">↺ Regenerate</button>
+          <button class="btn btn-accent" onclick="copyCode()">Copy</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Servo definitions ─────────────────────────────────────────────────────
+const SERVOS=[
+  {id:'base',   name:'Base',       type:'MG995',pin:0,min:0,max:180,center:90,group:'mg'},
+  {id:'shldr',  name:'Shoulder',   type:'MG995',pin:1,min:0,max:180,center:90,group:'mg'},
+  {id:'elbow',  name:'Elbow',      type:'MG995',pin:2,min:0,max:180,center:90,group:'mg'},
+  {id:'wrpitch',name:'Wrist Pitch',type:'SG90', pin:3,min:0,max:180,center:90,group:'sg'},
+  {id:'wrroll', name:'Wrist Roll', type:'SG90', pin:4,min:0,max:180,center:90,group:'sg'},
+  {id:'grip',   name:'Gripper',    type:'SG90', pin:5,min:0,max:90, center:45,group:'sg'},
+];
+const SEQ_ORDER=['base','shldr','elbow','wrpitch','wrroll'];
+const FILES=['a','b','c','d','e','f','g','h'];
+const RANKS=[8,7,6,5,4,3,2,1];
+const ALL_SQUARES=[];
+for(let r=0;r<8;r++)for(let f=0;f<8;f++)ALL_SQUARES.push(FILES[f]+RANKS[r]);
+
+const state={
+  angles:Object.fromEntries(SERVOS.map(s=>[s.id,s.center])),
+  safe:Object.fromEntries(SERVOS.map(s=>[s.id,{min:s.min,max:s.max}])),
+  zones:{rest:null,capture:null,reserve:null},
+  squarePositions:{},   // manually saved: {e2:{base:90,...}, ...}
+  activeSquare:null,
+  moveType:'normal',
+  seqRunning:false,
+  timing:Object.fromEntries(SERVOS.map(s=>[s.id,{stepMs:s.id==='grip'?30:8,delay:250}])),
+};
+
+// ── WebSocket ─────────────────────────────────────────────────────────────
+let ws = null;
+let wsSentCount = 0;
+
+function wsConnect() {
+  const url = document.getElementById("ws-url").value;
+
+  try {
+    ws = new WebSocket(url);
+
+    const dot = document.getElementById("ws-dot");
+    const status = document.getElementById("ws-status");
+
+    dot.classList.remove("connected", "error");
+    dot.classList.add("connecting");
+    status.textContent = "Connecting...";
+
+    ws.onopen = () => {
+      dot.classList.remove("connecting");
+      dot.classList.add("connected");
+      status.textContent = "Connected";
+      log("WebSocket connected", "log-ok");
+    };
+
+    ws.onclose = () => {
+      dot.classList.remove("connected");
+      dot.classList.add("error");
+      status.textContent = "Disconnected";
+      log("WebSocket disconnected", "log-err");
+    };
+
+    ws.onerror = () => {
+      dot.classList.remove("connected");
+      dot.classList.add("error");
+      status.textContent = "Error";
+      log("WebSocket error", "log-err");
+    };
+
+    // ⭐ IMPORTANT: Handle incoming messages
+    ws.onmessage = (event) => {
+      const msg = event.data.trim();
+      if (msg.startsWith("MOVE:")) {
+        handleIncomingMove(msg);
+      }
+    };
+
+  } catch (err) {
+    console.error(err);
+    addLog("err", "WebSocket error: " + err.message);
+  }
+}
+function wsDisconnect(){if(ws){ws.close();ws=null;}setWsStatus('','Disconnected');}
+function wsSend(cmd){if(ws&&ws.readyState===WebSocket.OPEN){ws.send(cmd);wsSentCount++;document.getElementById('ws-sent').textContent='↑ '+wsSentCount;}}
+function log(message, className){
+  const normalized = className === 'log-ok' ? 'ok' : className === 'log-err' ? 'err' : 'info';
+  addLog(normalized, message);
+}
+function addLog(type,msg){
+  const box=document.getElementById('log-box');
+  const d=document.createElement('div');d.className='log-'+type;
+  d.textContent='['+new Date().toLocaleTimeString('en-US',{hour12:false})+'] '+msg;
+  box.appendChild(d);box.scrollTop=box.scrollHeight;
+  while(box.children.length>100)box.removeChild(box.firstChild);
+}
+
+// ── INCOMING MOVE HANDLER ─────────────────────────────────────────────────
+function handleIncomingMove(cmd) {
+  // Format: MOVE:type:from:to[:extra]
+  const parts = cmd.split(":");
+
+  if (parts.length < 4) {
+    console.warn("Invalid MOVE format:", cmd);
+    return;
+  }
+
+  const type = parts[1];
+  const from = parts[2];
+  const to   = parts[3];
+  const extra = parts[4] || null;
+
+  console.log("[MOVE RECEIVED]", { type, from, to, extra });
+
+  // --- UI UPDATE ---
+  setMoveType(type);
+
+  document.getElementById("from-sq").value = from;
+  document.getElementById("to-sq").value   = to;
+
+  // Handle extra square (en passant etc.)
+  const extraWrap = document.getElementById("extra-sq-wrap");
+  const extraInput = document.getElementById("extra-sq");
+
+  if (extra) {
+    extraWrap.style.display = "block";
+    extraInput.value = extra;
+  } else {
+    extraWrap.style.display = "none";
+    extraInput.value = "";
+  }
+
+  // --- AUTO EXECUTE ---
+  setTimeout(() => {
+    console.log("[AUTO EXECUTE] Running sequence...");
+    runMoveSequence();
+  }, 300);
+}
+
+// ── Smooth slew engine ────────────────────────────────────────────────────
+// Tracks the REAL current angle of each servo (what was last sent to the Pico)
+const currentAngles=Object.fromEntries(SERVOS.map(s=>[s.id,s.center]));
+
+function angleToPulse(a){return Math.round(500+(a/180)*2000);}
+
+// Instantly set (only used during calibration slider drags — still sends immediate)
+// But we limit rate so the Pico can keep up
+let lastSendTime={};
+function sendServoDirect(id,angle){
+  const s=SERVOS.find(x=>x.id===id);
+  const now=Date.now();
+  // Throttle to max 50Hz per servo
+  if(lastSendTime[id]&&now-lastSendTime[id]<20)return;
+  lastSendTime[id]=now;
+  wsSend('S'+s.pin+':'+angleToPulse(angle));
+  currentAngles[id]=angle;
+}
+
+// SLEW: move a servo smoothly one degree at a time
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function slewServo(id,targetAngle,msPerDeg){
+  const safe=state.safe[id];
+  targetAngle=Math.max(safe.min,Math.min(safe.max,Math.round(targetAngle)));
+  let cur=currentAngles[id];
+  const dir=targetAngle>cur?1:-1;
+  while(Math.round(cur)!==targetAngle&&state.seqRunning!==false){
+    cur+=dir;
+    cur=Math.max(safe.min,Math.min(safe.max,cur));
+    // Update UI
+    state.angles[id]=Math.round(cur);
+    const slEl=document.getElementById('sl-'+id);
+    if(slEl)slEl.value=Math.round(cur);
+    const vEl=document.getElementById('v-'+id);
+    if(vEl)vEl.textContent=Math.round(cur)+'°';
+    const pEl=document.getElementById('p-'+id);
+    if(pEl)pEl.textContent=angleToPulse(Math.round(cur))+'µs';
+    sendServoDirect(id,Math.round(cur));
+    await sleep(msPerDeg);
+    if(Math.round(cur)===targetAngle)break;
+  }
+  currentAngles[id]=targetAngle;
+}
+
+// ── SAFE TRAVEL HEIGHT ────────────────────────────────────────────────────
+// Shoulder angle when arm is safely raised above all pieces during travel
+const SAFE_TRAVEL_SHLDR = 110; // matches rest shoulder height
+
+// Move all arm servos sequentially (base→shoulder→elbow→wrist), optionally grip
+async function moveToPositionSequential(targetPos,includeGrip=false,gripTarget=null){
+  for(const id of SEQ_ORDER){
+    if(!state.seqRunning&&state.seqRunning!==undefined)return;
+    const target=targetPos[id]!==undefined?targetPos[id]:currentAngles[id];
+    const msPerDeg=state.timing[id].stepMs;
+    await slewServo(id,target,msPerDeg);
+    await sleep(state.timing[id].delay);
+  }
+  if(includeGrip){
+    const gt=gripTarget!==null?gripTarget:(parseInt(document.getElementById('grip-open').value)||10);
+    const msG=parseInt(document.getElementById('grip-speed').value)||30;
+    await slewServo('grip',gt,msG);
+    await sleep(state.timing['grip'].delay);
+  }
+}
+
+// ── RAISE arm to safe travel height (shoulder up first) ───────────────────
+async function raiseArm(){
+  const ms = state.timing['shldr'].stepMs;
+  await slewServo('shldr', SAFE_TRAVEL_SHLDR, ms);
+  await sleep(state.timing['shldr'].delay);
+}
+
+// ── MOVE horizontally to above a square (base → elbow → wrpitch → wrroll) ─
+async function moveHorizontal(pos){
+  for(const id of ['base','elbow','wrpitch','wrroll']){
+    if(pos[id]===undefined) continue;
+    const ms = state.timing[id] ? state.timing[id].stepMs : 40;
+    await slewServo(id, pos[id], ms);
+    await sleep(state.timing[id] ? state.timing[id].delay : 250);
+  }
+}
+
+// ── LOWER arm shoulder down to target square ──────────────────────────────
+async function lowerArm(pos){
+  const ms = state.timing['shldr'].stepMs;
+  await slewServo('shldr', pos['shldr'], ms);
+  await sleep(state.timing['shldr'].delay);
+}
+
+async function gotoZoneSlow(name){
+  const z=state.zones[name];
+  if(!z){addLog('err',name+' zone not saved');return;}
+  const wasRunning=state.seqRunning;
+  state.seqRunning=true;
+  await moveToPositionSequential(z,true,z['grip']);
+  if(!wasRunning)state.seqRunning=false;
+}
+
+// ── Servo control UI ──────────────────────────────────────────────────────
+function buildServoRows(group){
+  const el=document.getElementById(group==='mg'?'mg-servos':'sg-servos');
+  SERVOS.filter(s=>s.group===group).forEach(s=>{
+    const row=document.createElement('div');row.className='servo-row';
+    row.innerHTML=`<div><div class="servo-name">${s.name}</div><div class="servo-sub">${s.type}·GP${s.pin}</div></div>
+      <div class="nudge" onmousedown="startNudge('${s.id}',-1)" onmouseup="stopNudge()" onmouseleave="stopNudge()" ontouchstart="startNudge('${s.id}',-1)" ontouchend="stopNudge()">−</div>
+      <input type="range" id="sl-${s.id}" min="${s.min}" max="${s.max}" step="1" value="${s.center}" oninput="onSliderChange('${s.id}',this.value)">
+      <div class="nudge" onmousedown="startNudge('${s.id}',1)" onmouseup="stopNudge()" onmouseleave="stopNudge()" ontouchstart="startNudge('${s.id}',1)" ontouchend="stopNudge()">+</div>
+      <div class="val-box" id="v-${s.id}">${s.center}°</div>
+      <div class="pulse-box" id="p-${s.id}">${angleToPulse(s.center)}µs</div>`;
+    el.appendChild(row);
+  });
+}
+
+// Slider: sends smoothly but via direct throttled sends (calibration mode — immediate feedback)
+function onSliderChange(id,val){
+  val=parseInt(val);
+  const safe=state.safe[id];
+  val=Math.max(safe.min,Math.min(safe.max,val));
+  state.angles[id]=val;
+  currentAngles[id]=val;
+  document.getElementById('v-'+id).textContent=val+'°';
+  document.getElementById('p-'+id).textContent=angleToPulse(val)+'µs';
+  sendServoDirect(id,val);
+}
+
+let nudgeTimer=null,nudgeInterval=null;
+function startNudge(id,dir){doNudge(id,dir);nudgeTimer=setTimeout(()=>{nudgeInterval=setInterval(()=>doNudge(id,dir),60);},380);}
+function stopNudge(){clearTimeout(nudgeTimer);clearInterval(nudgeInterval);}
+function doNudge(id,dir){
+  const safe=state.safe[id];
+  const n=Math.max(safe.min,Math.min(safe.max,state.angles[id]+dir));
+  if(n!==state.angles[id]){
+    state.angles[id]=n; currentAngles[id]=n;
+    document.getElementById('sl-'+id).value=n;
+    document.getElementById('v-'+id).textContent=n+'°';
+    document.getElementById('p-'+id).textContent=angleToPulse(n)+'µs';
+    sendServoDirect(id,n);
+  }
+}
+
+function gotoPreset(name){
+  const p=name==='center'?Object.fromEntries(SERVOS.map(s=>[s.id,90])):Object.fromEntries(SERVOS.map(s=>[s.id,90]));
+  SERVOS.forEach(s=>{onSliderChange(s.id,p[s.id]||90);});
+  document.getElementById('pose-status').textContent='→ '+name;
+}
+
+// ── Board grid — manual calibration ───────────────────────────────────────
+function buildBoardGrid(){
+  const grid=document.getElementById('board-grid');grid.innerHTML='';
+  const rankLabels=document.getElementById('rank-labels');rankLabels.innerHTML='';
+  const fileLabels=document.getElementById('file-labels');fileLabels.innerHTML='';
+
+  RANKS.forEach(r=>{
+    const d=document.createElement('div');
+    d.style.cssText='width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);';
+    d.textContent=r; rankLabels.appendChild(d);
+  });
+  FILES.forEach(f=>{
+    const d=document.createElement('div');
+    d.style.cssText='width:44px;text-align:center;font-size:10px;color:var(--text3);';
+    d.textContent=f.toUpperCase(); fileLabels.appendChild(d);
+  });
+
+  for(let r=0;r<8;r++){
+    for(let f=0;f<8;f++){
+      const sq=FILES[f]+RANKS[r];
+      const div=document.createElement('div');
+      const isLight=(f+r)%2===0;
+      div.className='sq '+(isLight?'light':'dark');
+      div.id='sq-'+sq;
+      div.innerHTML=`<span>${sq}</span><div class="sq-dot"></div>`;
+      div.onclick=()=>selectSquare(sq);
+      grid.appendChild(div);
+    }
+  }
+  refreshBoardColors();
+}
+
+function refreshBoardColors(){
+  ALL_SQUARES.forEach(sq=>{
+    const el=document.getElementById('sq-'+sq);if(!el)return;
+    const f=ALL_SQUARES.indexOf(sq)%8, r=Math.floor(ALL_SQUARES.indexOf(sq)/8);
+    const isLight=(FILES.indexOf(sq[0])+RANKS.indexOf(parseInt(sq.slice(1))))%2===0;
+    if(sq===state.activeSquare){el.className='sq active-sq';}
+    else if(state.squarePositions[sq]){el.className='sq saved';}
+    else{el.className='sq '+(isLight?'light':'dark');}
+  });
+  updateCalibProgress();
+}
+
+function selectSquare(sq){
+  state.activeSquare=sq;
+  refreshBoardColors();
+  document.getElementById('sq-detail-title').textContent='Square: '+sq.toUpperCase();
+  const pos=state.squarePositions[sq];
+  document.getElementById('sq-detail-vals').textContent=pos
+    ?SERVOS.map(s=>`${s.id.padEnd(8)}  ${pos[s.id]}°   (${angleToPulse(pos[s.id])}µs)`).join('\n')
+    :'Not saved yet — position arm then click Save';
+  document.getElementById('board-status').textContent=pos?'Saved ✓ — you can re-save to update':'Not saved — move arm over this square then save';
+}
+
+function saveActiveSquare(){
+  if(!state.activeSquare){addLog('err','No square selected');return;}
+  state.squarePositions[state.activeSquare]={...state.angles};
+  selectSquare(state.activeSquare); // refresh detail panel
+  refreshBoardColors();
+  addLog('ok','Saved '+state.activeSquare.toUpperCase()+' → '+SERVOS.map(s=>s.id+':'+state.angles[s.id]+'°').join(' '));
+  // Auto-advance to next unsaved square
+  const idx=ALL_SQUARES.indexOf(state.activeSquare);
+  const next=ALL_SQUARES.slice(idx+1).find(s=>!state.squarePositions[s]);
+  if(next)selectSquare(next);
+}
+
+function clearActiveSquare(){
+  if(!state.activeSquare)return;
+  delete state.squarePositions[state.activeSquare];
+  selectSquare(state.activeSquare);
+  refreshBoardColors();
+  addLog('info','Cleared '+state.activeSquare.toUpperCase());
+}
+
+function clearAllSquares(){
+  if(!confirm('Clear all 64 saved square positions?'))return;
+  state.squarePositions={};refreshBoardColors();
+  document.getElementById('sq-detail-vals').textContent='—';
+  addLog('warn','All squares cleared');
+}
+
+function gotoSavedSquare(){
+  if(!state.activeSquare||!state.squarePositions[state.activeSquare]){addLog('err','Square not saved yet');return;}
+  const pos=state.squarePositions[state.activeSquare];
+  SERVOS.forEach(s=>onSliderChange(s.id,pos[s.id]));
+  addLog('info','Jumped to '+state.activeSquare.toUpperCase()+' (direct)');
+}
+
+function navSquare(dir){
+  const idx=state.activeSquare?ALL_SQUARES.indexOf(state.activeSquare):0;
+  const next=ALL_SQUARES[Math.max(0,Math.min(63,idx+dir))];
+  selectSquare(next);
+}
+
+function updateCalibProgress(){
+  const n=Object.keys(state.squarePositions).length;
+  document.getElementById('saved-count').textContent=n;
+  document.getElementById('calib-bar').style.width=(n/64*100)+'%';
+}
+
+function exportSquares(){
+  const slew = {};
+  SERVOS.forEach(s => { slew[s.id] = state.timing[s.id].stepMs; });
+  const gripOpen  = parseInt(document.getElementById('grip-open')?.value)  || 10;
+  const gripClose = parseInt(document.getElementById('grip-close')?.value) || 60;
+  const data = JSON.stringify({
+    squares:    state.squarePositions,
+    zones:      state.zones,
+    safe:       state.safe,
+    timing:     state.timing,
+    slew:       slew,
+    grip_open:  gripOpen,
+    grip_close: gripClose,
+  }, null, 2);
+  const a=document.createElement('a');a.href='data:application/json,'+encodeURIComponent(data);a.download='chess_arm_calib.json';a.click();
+  addLog('ok','Exported calibration JSON');
+}
+
+// ── Zones ─────────────────────────────────────────────────────────────────
+function saveZone(name){
+  state.zones[name]={...state.angles};
+  const card=document.getElementById(name+'-card');
+  if(card)card.classList.add('saved');
+  document.getElementById(name+'-vals').textContent=SERVOS.map(s=>`${s.id}: ${state.angles[s.id]}°`).join('  ');
+  addLog('ok',name+' zone saved');
+}
+
+// ── Safe limits ───────────────────────────────────────────────────────────
+function buildSafeZones(){
+  const el=document.getElementById('safe-zones');
+  SERVOS.forEach(s=>{
+    const row=document.createElement('div');row.className='safe-row';
+    row.innerHTML=`<div class="safe-label">${s.name}</div>
+      <input class="safe-input" type="number" id="smin-${s.id}" value="${s.min}" min="0" max="180" oninput="updateSafe('${s.id}')">
+      <span style="font-size:11px;color:var(--text3)">min</span>
+      <div class="safe-bar"><div class="safe-range" id="sbar-${s.id}" style="left:${s.min/180*100}%;width:${(s.max-s.min)/180*100}%"></div></div>
+      <input class="safe-input" type="number" id="smax-${s.id}" value="${s.max}" min="0" max="180" oninput="updateSafe('${s.id}')">
+      <span style="font-size:11px;color:var(--text3)">max</span>`;
+    el.appendChild(row);
+  });
+}
+function updateSafe(id){
+  const mn=parseInt(document.getElementById('smin-'+id).value)||0,mx=parseInt(document.getElementById('smax-'+id).value)||180;
+  state.safe[id]={min:Math.max(0,mn),max:Math.min(180,mx)};
+  const bar=document.getElementById('sbar-'+id);
+  if(bar){bar.style.left=(mn/180*100)+'%';bar.style.width=((mx-mn)/180*100)+'%';}
+}
+
+// ── Timing table ──────────────────────────────────────────────────────────
+function buildTimingTable(){
+  const tbody=document.getElementById('timing-tbody');
+  SERVOS.forEach(s=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${s.name}</td><td style="color:var(--text3)">${s.type}</td>
+      <td><input type="number" value="${state.timing[s.id].stepMs}" min="1" max="200" oninput="state.timing['${s.id}'].stepMs=parseInt(this.value)||8"></td>
+      <td><input type="number" value="${state.timing[s.id].delay}" min="0" max="2000" oninput="state.timing['${s.id}'].delay=parseInt(this.value)||250"></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function testSlew(){
+  const id=document.getElementById('slew-test-servo').value;
+  const angle=parseInt(document.getElementById('slew-test-angle').value)||90;
+  const msPerDeg=id==='grip'?(parseInt(document.getElementById('grip-speed').value)||30):state.timing[id].stepMs;
+  document.getElementById('slew-test-status').textContent='Slewing '+id+' → '+angle+'°…';
+  const prev=state.seqRunning; state.seqRunning=true;
+  await slewServo(id,angle,msPerDeg);
+  state.seqRunning=prev;
+  document.getElementById('slew-test-status').textContent='Done';
+}
+
+// ── Move type ─────────────────────────────────────────────────────────────
+function setMoveType(type){
+  state.moveType=type;
+  ['normal','capture','castle','enpassant','promote'].forEach(t=>document.getElementById('mt-'+t).classList.toggle('active',t===type));
+  const extra=document.getElementById('extra-sq-wrap');
+  const lbl=document.getElementById('extra-sq-label');
+  if(type==='enpassant'){extra.style.display='';lbl.textContent='Captured Pawn Sq';}
+  else if(type==='castle'){extra.style.display='';lbl.textContent='Rook Square';}
+  else{extra.style.display='none';}
+}
+
+// ── Sequencer ─────────────────────────────────────────────────────────────
+function buildStepList(steps){
+  const el=document.getElementById('seq-steps');el.innerHTML='';
+  steps.forEach((step,i)=>{
+    const div=document.createElement('div');div.className='seq-step pending';div.id='step-'+i;
+    div.innerHTML=`<div class="step-bar" id="step-bar-${i}" style="width:0%"></div>
+      <div class="seq-num">${i+1}</div>
+      <div class="seq-label">${step.label}<div class="seq-sub">${step.sub||''}</div></div>`;
+    el.appendChild(div);
+  });
+}
+function setStep(i,st){
+  const el=document.getElementById('step-'+i);if(!el)return;
+  el.className='seq-step '+st;
+  if(st==='running')document.getElementById('step-bar-'+i).style.width='100%';
+  el.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function setProgress(pct){document.getElementById('progress-fill').style.width=pct+'%';}
+
+async function gotoRestSeq(){
+  await liftToRest();
+}
+
+async function runMoveSequence(){
+  if(state.seqRunning){addLog('err','Already running');return;}
+  const from=document.getElementById('from-sq').value.trim().toLowerCase();
+  const to=document.getElementById('to-sq').value.trim().toLowerCase();
+  const extra=document.getElementById('extra-sq').value.trim().toLowerCase();
+  const type=state.moveType;
+
+  if((type!=='castle')&&(!state.squarePositions[from]||!state.squarePositions[to])){
+    addLog('err','Squares not calibrated — save positions in Board Squares tab');return;
+  }
+
+  state.seqRunning=true;
+  document.getElementById('seq-status').textContent='Running…';
+
+  let steps=[];
+
+  if(type==='normal'){
+    steps=[
+      {label:'Raise arm'},
+      {label:'Go to rest'},
+      {label:'Raise above '+from.toUpperCase()},
+      {label:'Move base → elbow → wrist to '+from.toUpperCase()},
+      {label:'Lower to '+from.toUpperCase()},
+      {label:'Close gripper — pick piece'},
+      {label:'Raise arm with piece'},
+      {label:'Move base → elbow → wrist to '+to.toUpperCase()},
+      {label:'Lower to '+to.toUpperCase()},
+      {label:'Open gripper — place piece'},
+      {label:'Raise arm'},
+      {label:'Return to rest'}
+    ];
+    buildStepList(steps);
+    let i=0;const p=()=>{setStep(i,'done');i++;setStep(i,'running');setProgress(Math.round(i/steps.length*100));};
+    setStep(0,'running');
+    await raiseArm();p();
+    await liftToRest();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[from]);p();
+    await lowerArm(state.squarePositions[from]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[to]);p();
+    await lowerArm(state.squarePositions[to]);p();
+    await gripOpenAction();p();
+    await raiseArm();p();
+    await liftToRest();setStep(i,'done');setProgress(100);
+
+  } else if(type==='capture'){
+    if(!state.zones.capture){addLog('err','Capture zone not saved');state.seqRunning=false;return;}
+    steps=[
+      {label:'Go to rest'},
+      {label:'Raise above '+to.toUpperCase()+' (captured piece)'},
+      {label:'Lower to '+to.toUpperCase()},
+      {label:'Close gripper'},
+      {label:'Raise with piece'},
+      {label:'Move to capture zone'},
+      {label:'Lower to capture zone'},
+      {label:'Open gripper — drop captured'},
+      {label:'Raise arm'},
+      {label:'Move to above '+from.toUpperCase()},
+      {label:'Lower to '+from.toUpperCase()},
+      {label:'Close gripper'},
+      {label:'Raise with piece'},
+      {label:'Move to above '+to.toUpperCase()},
+      {label:'Lower to '+to.toUpperCase()},
+      {label:'Open gripper — place piece'},
+      {label:'Return to rest'}
+    ];
+    buildStepList(steps);
+    let i=0;const p=()=>{setStep(i,'done');i++;setStep(i,'running');setProgress(Math.round(i/steps.length*100));};
+    setStep(0,'running');
+    await liftToRest();p();
+    await moveHorizontal(state.squarePositions[to]);p();
+    await lowerArm(state.squarePositions[to]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.zones.capture);p();
+    await lowerArm(state.zones.capture);p();
+    await gripOpenAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[from]);p();
+    await lowerArm(state.squarePositions[from]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[to]);p();
+    await lowerArm(state.squarePositions[to]);p();
+    await gripOpenAction();p();
+    await liftToRest();setStep(i,'done');setProgress(100);
+
+  } else if(type==='castle'){
+    const rookSq=extra||'a1';
+    const rookDest=from; const kingDest=to; const kingSq='e'+from[1];
+    if(!state.squarePositions[rookSq]||!state.squarePositions[rookDest]||!state.squarePositions[kingSq]||!state.squarePositions[kingDest]){
+      addLog('err','Calibrate all 4 castle squares');state.seqRunning=false;return;
+    }
+    steps=[
+      {label:'Go to rest'},
+      {label:'Move above rook at '+rookSq.toUpperCase()},
+      {label:'Lower to rook'},
+      {label:'Close gripper'},
+      {label:'Raise rook'},
+      {label:'Move above '+rookDest.toUpperCase()},
+      {label:'Lower to '+rookDest.toUpperCase()},
+      {label:'Place rook'},
+      {label:'Raise arm'},
+      {label:'Move above king at '+kingSq.toUpperCase()},
+      {label:'Lower to king'},
+      {label:'Close gripper'},
+      {label:'Raise king'},
+      {label:'Move above '+kingDest.toUpperCase()},
+      {label:'Lower to '+kingDest.toUpperCase()},
+      {label:'Place king'},
+      {label:'Return to rest'}
+    ];
+    buildStepList(steps);
+    let i=0;const p=()=>{setStep(i,'done');i++;setStep(i,'running');setProgress(Math.round(i/steps.length*100));};
+    setStep(0,'running');
+    await liftToRest();p();
+    await moveHorizontal(state.squarePositions[rookSq]);p();
+    await lowerArm(state.squarePositions[rookSq]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[rookDest]);p();
+    await lowerArm(state.squarePositions[rookDest]);p();
+    await gripOpenAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[kingSq]);p();
+    await lowerArm(state.squarePositions[kingSq]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[kingDest]);p();
+    await lowerArm(state.squarePositions[kingDest]);p();
+    await gripOpenAction();p();
+    await liftToRest();setStep(i,'done');setProgress(100);
+
+  } else if(type==='enpassant'){
+    if(!state.zones.capture){addLog('err','Capture zone not saved');state.seqRunning=false;return;}
+    const capturedSq=extra||to;
+    if(!state.squarePositions[capturedSq]){addLog('err','Calibrate the captured pawn square: '+capturedSq);state.seqRunning=false;return;}
+    steps=[
+      {label:'Go to rest'},
+      {label:'Move above captured pawn at '+capturedSq.toUpperCase()},
+      {label:'Lower to pawn'},
+      {label:'Close gripper'},
+      {label:'Raise pawn'},
+      {label:'Move to capture zone'},
+      {label:'Lower to zone'},
+      {label:'Drop pawn'},
+      {label:'Raise arm'},
+      {label:'Move above '+from.toUpperCase()},
+      {label:'Lower to '+from.toUpperCase()},
+      {label:'Close gripper'},
+      {label:'Raise piece'},
+      {label:'Move above '+to.toUpperCase()},
+      {label:'Lower to '+to.toUpperCase()},
+      {label:'Place piece'},
+      {label:'Return to rest'}
+    ];
+    buildStepList(steps);
+    let i=0;const p=()=>{setStep(i,'done');i++;setStep(i,'running');setProgress(Math.round(i/steps.length*100));};
+    setStep(0,'running');
+    await liftToRest();p();
+    await moveHorizontal(state.squarePositions[capturedSq]);p();
+    await lowerArm(state.squarePositions[capturedSq]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.zones.capture);p();
+    await lowerArm(state.zones.capture);p();
+    await gripOpenAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[from]);p();
+    await lowerArm(state.squarePositions[from]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[to]);p();
+    await lowerArm(state.squarePositions[to]);p();
+    await gripOpenAction();p();
+    await liftToRest();setStep(i,'done');setProgress(100);
+
+  } else if(type==='promote'){
+    if(!state.zones.capture||!state.zones.reserve){addLog('err','Save capture zone and reserve zone first');state.seqRunning=false;return;}
+    steps=[
+      {label:'Go to rest'},
+      {label:'Move above pawn at '+from.toUpperCase()},
+      {label:'Lower to pawn'},
+      {label:'Close gripper'},
+      {label:'Raise pawn'},
+      {label:'Move to capture zone'},
+      {label:'Drop pawn'},
+      {label:'Raise arm'},
+      {label:'Move to reserve zone'},
+      {label:'Lower to reserve'},
+      {label:'Close gripper — pick piece'},
+      {label:'Raise promoted piece'},
+      {label:'Move above '+to.toUpperCase()},
+      {label:'Lower to '+to.toUpperCase()},
+      {label:'Place promoted piece'},
+      {label:'Return to rest'}
+    ];
+    buildStepList(steps);
+    let i=0;const p=()=>{setStep(i,'done');i++;setStep(i,'running');setProgress(Math.round(i/steps.length*100));};
+    setStep(0,'running');
+    await liftToRest();p();
+    await moveHorizontal(state.squarePositions[from]);p();
+    await lowerArm(state.squarePositions[from]);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.zones.capture);
+    await lowerArm(state.zones.capture);
+    await gripOpenAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.zones.reserve);p();
+    await lowerArm(state.zones.reserve);p();
+    await gripCloseAction();p();
+    await raiseArm();p();
+    await moveHorizontal(state.squarePositions[to]);p();
+    await lowerArm(state.squarePositions[to]);p();
+    await gripOpenAction();p();
+    await liftToRest();setStep(i,'done');setProgress(100);
+  }
+
+  state.seqRunning=false;
+  document.getElementById('seq-status').textContent='✓ Complete';
+  addLog('ok','Move complete');
+}
+
+function stopSequence(){state.seqRunning=false;document.getElementById('seq-status').textContent='Stopped';addLog('err','Stopped by user');}
+
+// ── Import/Export ─────────────────────────────────────────────────────────
+function exportJSON(){
+  const slew = {};
+  SERVOS.forEach(s => { slew[s.id] = state.timing[s.id].stepMs; });
+  const gripOpen  = parseInt(document.getElementById('grip-open')?.value)  || 10;
+  const gripClose = parseInt(document.getElementById('grip-close')?.value) || 60;
+  const data = JSON.stringify({
+    squares:    state.squarePositions,
+    zones:      state.zones,
+    safe:       state.safe,
+    timing:     state.timing,
+    slew:       slew,
+    grip_open:  gripOpen,
+    grip_close: gripClose,
+  }, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'chess_arm_calib.json';
+  a.click();
+  addLog('ok','chess_arm_calib.json downloaded');
+}
+function copyConfig(){
+  const slew = {};
+  SERVOS.forEach(s => { slew[s.id] = state.timing[s.id].stepMs; });
+  const gripOpen  = parseInt(document.getElementById('grip-open')?.value)  || 10;
+  const gripClose = parseInt(document.getElementById('grip-close')?.value) || 60;
+  const data = JSON.stringify({
+    squares:    state.squarePositions,
+    zones:      state.zones,
+    safe:       state.safe,
+    timing:     state.timing,
+    slew:       slew,
+    grip_open:  gripOpen,
+    grip_close: gripClose,
+  }, null, 2);
+  navigator.clipboard.writeText(data);
+  addLog('ok','Config copied to clipboard');
+}
+function importConfig(){
+  const input=document.createElement('input');input.type='file';input.accept='.json';
+  input.onchange=e=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(data.squares) state.squarePositions=data.squares;
+        if(data.zones)   state.zones=data.zones;
+        if(data.safe)    Object.assign(state.safe,data.safe);
+        if(data.timing)  Object.assign(state.timing,data.timing);
+
+        // ✅ Restore gripper values to input fields
+        if(data.grip_open !== undefined){
+          const el=document.getElementById('grip-open');
+          if(el) el.value=data.grip_open;
+        }
+        if(data.grip_close !== undefined){
+          const el=document.getElementById('grip-close');
+          if(el) el.value=data.grip_close;
+        }
+
+        // ✅ Restore slew timing to table inputs
+        if(data.timing){
+          SERVOS.forEach(s=>{
+            const stepEl=document.getElementById('step-'+s.id);
+            const delEl =document.getElementById('delay-'+s.id);
+            if(stepEl && data.timing[s.id]) stepEl.value=data.timing[s.id].stepMs;
+            if(delEl  && data.timing[s.id]) delEl.value =data.timing[s.id].delay;
+          });
+        }
+
+        // ✅ Update zone cards display
+        ['rest','capture','reserve'].forEach(n=>{
+          if(state.zones[n]){
+            document.getElementById(n+'-vals').textContent=
+              SERVOS.map(s=>`${s.id}: ${state.zones[n][s.id]}°`).join('  ');
+            document.getElementById(n+'-card').classList.add('saved');
+          }
+        });
+
+        refreshBoardColors();
+        addLog('ok','Imported — '+Object.keys(state.squarePositions).length+
+               ' squares | zones: '+['rest','capture','reserve'].filter(n=>state.zones[n]).join(', ')+
+               ' | grip open='+data.grip_open+' close='+data.grip_close+
+               ' | slew='+data.timing?.base?.stepMs+'ms/°');
+      }catch(err){addLog('err','Import failed: '+err.message);}
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ── Code generation ───────────────────────────────────────────────────────
+function generateCode(){
+  const safeStr=SERVOS.map(s=>`    '${s.id}': (${state.safe[s.id].min}, ${state.safe[s.id].max}),`).join('\n');
+  const restStr=state.zones.rest?SERVOS.map(s=>`    '${s.id}': ${state.zones.rest[s.id]},`).join('\n'):'    # Not saved';
+  const capStr=state.zones.capture?SERVOS.map(s=>`    '${s.id}': ${state.zones.capture[s.id]},`).join('\n'):'    # Not saved';
+  const resStr=state.zones.reserve?SERVOS.map(s=>`    '${s.id}': ${state.zones.reserve[s.id]},`).join('\n'):'    # Not saved';
+  const sqStr=Object.keys(state.squarePositions).length?Object.entries(state.squarePositions).map(([sq,pos])=>`    '${sq}':{${SERVOS.map(s=>`'${s.id}':${pos[s.id]}`).join(',')}},`).join('\n'):'    # No squares saved yet';
+  const timingStr=SERVOS.map(s=>`    '${s.id}': {'step_ms':${state.timing[s.id].stepMs}, 'delay':${state.timing[s.id].delay}},`).join('\n');
+  const gripOpen=document.getElementById('grip-open')?.value||10;
+  const gripClose=document.getElementById('grip-close')?.value||60;
+  const gripSpeed=document.getElementById('grip-speed')?.value||30;
+
+  document.getElementById('code-output').textContent=
+`# Chess Arm — Full Sequential Controller (MicroPython)
+# Generated from calibration tool
+# Servos: MG995 x3 (GP0-2), SG90 x3 (GP3-5)
+# ALL movements are slewed (smooth, no slamming)
+
+from machine import Pin, PWM
+import time
+
+PINS = [${SERVOS.map(s=>s.pin).join(', ')}]
+pwms = [PWM(Pin(p)) for p in PINS]
+for p in pwms: p.freq(50)
+SERVO_IDS = [${SERVOS.map(s=>`'${s.id}'`).join(', ')}]
+SEQ_ORDER  = ['base', 'shldr', 'elbow', 'wrpitch', 'wrroll']
+
+SAFE_LIMITS = {
+${safeStr}
+}
+REST_POSITION = {
+${restStr}
+}
+CAPTURE_ZONE = {
+${capStr}
+}
+RESERVE_ZONE = {
+${resStr}
+}
+BOARD_POSITIONS = {
+${sqStr}
+}
+TIMING = {
+${timingStr}
+}
+GRIP_OPEN  = ${gripOpen}
+GRIP_CLOSE = ${gripClose}
+GRIP_SPEED = ${gripSpeed}   # ms per degree
+
+# Track current angles to enable smooth slewing
+current_angles = {s: 90 for s in SERVO_IDS}
+
+def angle_to_pulse(a):
+    return int(500 + (a / 180.0) * 2000)
+
+def set_servo_direct(servo_id, angle):
+    lo, hi = SAFE_LIMITS[servo_id]
+    angle = max(lo, min(hi, int(angle)))
+    idx = SERVO_IDS.index(servo_id)
+    pwms[idx].duty_ns(angle_to_pulse(angle) * 1000)
+    current_angles[servo_id] = angle
+
+def slew_servo(servo_id, target_angle, ms_per_deg=8):
+    """Move servo one degree at a time — no slamming."""
+    lo, hi = SAFE_LIMITS[servo_id]
+    target_angle = max(lo, min(hi, int(target_angle)))
+    cur = current_angles[servo_id]
+    direction = 1 if target_angle > cur else -1
+    while cur != target_angle:
+        cur += direction
+        cur = max(lo, min(hi, cur))
+        set_servo_direct(servo_id, cur)
+        time.sleep_ms(ms_per_deg)
+
+def move_sequential(target_pos, include_grip=False, grip_target=None):
+    """Move arm joints one at a time: base→shoulder→elbow→wrist."""
+    for servo_id in SEQ_ORDER:
+        if servo_id in target_pos:
+            ms = TIMING[servo_id]['step_ms']
+            slew_servo(servo_id, target_pos[servo_id], ms)
+            time.sleep_ms(TIMING[servo_id]['delay'])
+    if include_grip:
+        gt = grip_target if grip_target is not None else GRIP_OPEN
+        slew_servo('grip', gt, GRIP_SPEED)
+        time.sleep_ms(TIMING['grip']['delay'])
+
+def go_to_rest():
+    move_sequential(REST_POSITION, include_grip=True,
+                    grip_target=REST_POSITION.get('grip', GRIP_OPEN))
+
+def normal_move(from_sq, to_sq):
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[from_sq])
+    move_sequential(BOARD_POSITIONS[from_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[to_sq])
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+
+def capture_move(from_sq, to_sq):
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[to_sq])
+    move_sequential(BOARD_POSITIONS[to_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(CAPTURE_ZONE)
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[from_sq])
+    move_sequential(BOARD_POSITIONS[from_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[to_sq])
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+
+def castle_move(rook_sq, rook_dest, king_sq, king_dest):
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[rook_sq])
+    move_sequential(BOARD_POSITIONS[rook_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[rook_dest])
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[king_sq])
+    move_sequential(BOARD_POSITIONS[king_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[king_dest])
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+
+def en_passant_move(from_sq, to_sq, captured_pawn_sq):
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[captured_pawn_sq])
+    move_sequential(BOARD_POSITIONS[captured_pawn_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(CAPTURE_ZONE)
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[from_sq])
+    move_sequential(BOARD_POSITIONS[from_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[to_sq])
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+
+def promotion_move(pawn_sq, to_sq):
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[pawn_sq])
+    move_sequential(BOARD_POSITIONS[pawn_sq], True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(CAPTURE_ZONE)
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+    move_sequential(RESERVE_ZONE, True, GRIP_CLOSE)
+    go_to_rest()
+    move_sequential(BOARD_POSITIONS[to_sq])
+    slew_servo('grip', GRIP_OPEN, GRIP_SPEED)
+    go_to_rest()
+
+# ── Example ───────────────────────────────────────────────────────
+go_to_rest()
+normal_move('e2', 'e4')
+`;
+}
+
+function copyCode(){navigator.clipboard.writeText(document.getElementById('code-output').textContent);addLog('ok','Code copied');}
+
+// ── Navigation ────────────────────────────────────────────────────────────
+const NAVS=['servos','board','zones','safe','slew','sequence','game','code'];
+function setNav(name){
+  NAVS.forEach(n=>{
+    const nav=document.getElementById('nav-'+n);if(nav)nav.classList.toggle('active',n===name);
+    const tab=document.getElementById('tab-'+n);if(tab)tab.classList.toggle('active',n===name);
+  });
+  if(name==='code')generateCode();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+buildServoRows('mg'); buildServoRows('sg');
+buildBoardGrid(); buildSafeZones(); buildTimingTable();
+addLog('info','Ready — connect to pc_serial_bridge.py then calibrate squares manually');
+
+// ── MOVE COMMAND HANDLER ──────────────────────────────────────────────────
+let moveQueue   = [];
+let moveRunning = false;
+let stopMove    = false;
+
+function gameLog(msg, type){
+  const box = document.getElementById('game-log');
+  if(!box) return;
+  const d = document.createElement('div');
+  d.style.color = type==='err' ? 'var(--color-text-danger)'
+                : type==='ok'  ? 'var(--color-text-success)'
+                : type==='seq' ? 'var(--color-text-info)'
+                : 'var(--color-text-secondary)';
+  const ts = new Date().toLocaleTimeString('en-US',{hour12:false});
+  d.textContent = '['+ts+'] '+msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+  while(box.children.length > 120) box.removeChild(box.firstChild);
+  addLog(type||'info', msg);
+}
+
+function setArmStatus(msg, color){
+  const el = document.getElementById('game-arm-status');
+  if(el){ el.textContent = msg; el.style.color = color||'var(--color-text-primary)'; }
+  const dot = document.getElementById('game-ws-dot');
+  if(dot) dot.style.background = color||'var(--color-border-secondary)';
+  const lbl = document.getElementById('game-ws-label');
+  if(lbl) lbl.textContent = msg;
+}
+
+function updateGameInfo(){
+  const sqCount = document.getElementById('game-sq-count');
+  if(sqCount) sqCount.textContent = Object.keys(state.squarePositions).length;
+  const restEl = document.getElementById('game-rest-status');
+  if(restEl) restEl.textContent = state.zones.rest ? 'saved' : 'not set';
+}
+
+function handleMoveCommand(msg){
+  const parts = msg.split(':');
+  if(parts.length < 4){ gameLog('Bad MOVE cmd: '+msg,'err'); return; }
+  const type  = parts[1].toLowerCase();
+  const from  = parts[2].toLowerCase();
+  const to    = parts[3].toLowerCase();
+  const extra = parts[4] ? parts[4].toLowerCase() : null;
+
+  document.getElementById('game-last-cmd').textContent = msg;
+  gameLog('Received: '+msg, 'seq');
+
+  // Verify squares are calibrated before queuing
+  if(type !== 'castle' && !state.squarePositions[from]){
+    gameLog('ERROR: square '+from.toUpperCase()+' not calibrated — export JSON from calibrator first','err');
+    setArmStatus('Error: '+from.toUpperCase()+' not calibrated','var(--color-text-danger)');
+    return;
+  }
+  if(!state.squarePositions[to]){
+    gameLog('ERROR: square '+to.toUpperCase()+' not calibrated','err');
+    setArmStatus('Error: '+to.toUpperCase()+' not calibrated','var(--color-text-danger)');
+    return;
+  }
+  if(!state.zones.rest){
+    gameLog('ERROR: rest position not set — save it in Special Zones','err');
+    setArmStatus('Error: rest not set','var(--color-text-danger)');
+    return;
+  }
+
+  moveQueue.push({type, from, to, extra});
+  gameLog('Queued: '+type+' '+from.toUpperCase()+'->'+to.toUpperCase(), 'info');
+  if(!moveRunning) runNextMove();
+}
+
+async function runNextMove(){
+  if(moveQueue.length === 0){ moveRunning = false; setArmStatus('Idle','var(--color-text-success)'); return; }
+  moveRunning = true;
+  stopMove = false;
+  const m = moveQueue.shift();
+  const label = m.type.toUpperCase()+': '+m.from.toUpperCase()+'->'+m.to.toUpperCase();
+  gameLog('Executing '+label,'seq');
+  setArmStatus('Moving: '+label,'var(--color-text-info)');
+  try {
+    await executeMoveType(m.type, m.from, m.to, m.extra);
+    gameLog('Done: '+label,'ok');
+    setArmStatus('Done: '+label,'var(--color-text-success)');
+  } catch(e) {
+    gameLog('Failed: '+e.message,'err');
+    setArmStatus('Error','var(--color-text-danger)');
+  }
+  if(!stopMove) runNextMove();
+  else { moveRunning=false; setArmStatus('Stopped','var(--color-text-warning)'); }
+}
+
+function stopCurrentMove(){ stopMove=true; moveQueue=[]; gameLog('Stopped by user','err'); }
+
+// ── Slew engine — reads timing from HTML sliders ───────────────────────────
+function sleepMs(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+async function slewServo(id, targetAngle){
+  if(stopMove) throw new Error('stopped');
+  const s    = SERVOS.find(x=>x.id===id);
+  if(!s) return;
+  const safe = state.safe[id];
+  targetAngle = Math.max(safe.min, Math.min(safe.max, Math.round(targetAngle)));
+  let cur = Math.round(state.angles[id]);
+  if(cur === targetAngle) return;
+  const dir = targetAngle > cur ? 1 : -1;
+
+  // Read ms/degree from timing table (what user set in Slew Speed tab)
+  const msPerDeg = id === 'grip'
+    ? (parseInt(document.getElementById('grip-speed')?.value) || 30)
+    : (state.timing[id]?.stepMs || 8);
+
+  // Read inter-servo delay from timing table
+  const delayAfter = state.timing[id]?.delay || 250;
+
+  // Update steps display
+  const stepsEl = document.getElementById('game-steps');
+  if(stepsEl) stepsEl.textContent = 'Slewing '+id+': '+cur+'° → '+targetAngle+'°  ('+msPerDeg+'ms/°)';
+
+  while(cur !== targetAngle){
+    if(stopMove) throw new Error('stopped');
+    cur += dir;
+    cur = Math.max(safe.min, Math.min(safe.max, cur));
+    state.angles[id] = cur;
+    // Update slider UI
+    const sl = document.getElementById('sl-'+id);
+    if(sl) sl.value = cur;
+    const vEl = document.getElementById('v-'+id);
+    if(vEl) vEl.textContent = cur+'°';
+    // Send servo pulse
+    wsSend('S'+s.pin+':'+(Math.round(500+(cur/180)*2000)));
+    await sleepMs(msPerDeg);
+    if(cur === targetAngle) break;
+  }
+  state.angles[id] = targetAngle;
+  await sleepMs(delayAfter);
+}
+
+// ── Movement primitives ───────────────────────────────────────────────────
+// Correct sequence: RAISE shoulder → MOVE base/elbow/wrist → LOWER shoulder
+
+async function gripCloseAction(){
+  const angle = parseInt(document.getElementById('grip-close')?.value) || 5;
+  const msG = parseInt(document.getElementById('grip-speed')?.value) || 40;
+  await slewServo('grip', angle, msG);
+  await sleep(400);
+}
+
+async function gripOpenAction(){
+  const angle = parseInt(document.getElementById('grip-open')?.value) || 20;
+  const msG = parseInt(document.getElementById('grip-speed')?.value) || 40;
+  await slewServo('grip', angle, msG);
+  await sleep(400);
+}
+
+// Lift arm to safe travel height then go to rest position
+async function liftToRest(){
+  const rest = state.zones.rest;
+  if(!rest) throw new Error('rest position not set');
+  // 1. Raise shoulder first
+  await raiseArm();
+  // 2. Move base, elbow, wrist to rest
+  for(const id of ['base','elbow','wrpitch','wrroll']){
+    if(rest[id] !== undefined){
+      const ms = state.timing[id] ? state.timing[id].stepMs : 40;
+      await slewServo(id, rest[id], ms);
+      await sleep(state.timing[id] ? state.timing[id].delay : 250);
+    }
+  }
+  // 3. Lower shoulder to rest height
+  const ms = state.timing['shldr'].stepMs;
+  await slewServo('shldr', rest.shldr, ms);
+  await sleep(state.timing['shldr'].delay);
+}
+
+// Pick piece from a square
+// Sequence: raise → base → elbow → wrist → lower → grip close → raise
+async function pickFrom(sq){
+  const pos = state.squarePositions[sq];
+  if(!pos) throw new Error('square '+sq+' not calibrated');
+
+  gameLog('Raising arm','seq');
+  await raiseArm();                    // 1. raise shoulder
+
+  gameLog('Moving to above '+sq.toUpperCase(),'seq');
+  await moveHorizontal(pos);           // 2. base → elbow → wrpitch → wrroll
+
+  gameLog('Lowering to '+sq.toUpperCase(),'seq');
+  await lowerArm(pos);                 // 3. lower shoulder to square
+
+  gameLog('Closing gripper','seq');
+  await gripCloseAction();             // 4. grab piece
+
+  gameLog('Lifting piece','seq');
+  await raiseArm();                    // 5. raise shoulder with piece
+}
+
+// Place piece on a square
+// Sequence: base → elbow → wrist → lower → grip open → raise
+async function placeAt(sq){
+  const pos = state.squarePositions[sq];
+  if(!pos) throw new Error('square '+sq+' not calibrated');
+
+  gameLog('Moving to above '+sq.toUpperCase(),'seq');
+  await moveHorizontal(pos);           // 1. base → elbow → wrpitch → wrroll (already raised)
+
+  gameLog('Lowering to '+sq.toUpperCase(),'seq');
+  await lowerArm(pos);                 // 2. lower shoulder to square
+
+  gameLog('Opening gripper','seq');
+  await gripOpenAction();              // 3. release piece
+
+  gameLog('Lifting arm','seq');
+  await raiseArm();                    // 4. raise shoulder
+}
+
+// Drop piece at a zone (capture/reserve)
+async function dropAtZone(zoneName){
+  const z = state.zones[zoneName];
+  if(!z) throw new Error(zoneName+' zone not set');
+
+  gameLog('Moving to '+zoneName+' zone','seq');
+  await moveHorizontal(z);             // 1. base → elbow → wrist (already raised)
+
+  gameLog('Lowering to zone','seq');
+  await lowerArm(z);                   // 2. lower
+
+  gameLog('Releasing at zone','seq');
+  await gripOpenAction();              // 3. release
+
+  gameLog('Lifting from zone','seq');
+  await raiseArm();                    // 4. raise
+}
+
+// ── Move type executors ───────────────────────────────────────────────────
+async function executeMoveType(type, from, to, extra){
+  // Always start by raising arm and going to rest
+  await liftToRest();
+
+  if(type === 'normal'){
+    // RAISE → pick from → RAISE → place at → RAISE → rest
+    await pickFrom(from);        // raise → horizontal → lower → grip close → raise
+    await placeAt(to);           // horizontal → lower → grip open → raise
+    await liftToRest();
+
+  } else if(type === 'capture'){
+    // Remove captured piece first, then move capturing piece
+    await pickFrom(to);          // pick captured piece
+    await dropAtZone('capture'); // drop at capture zone
+    await pickFrom(from);        // pick capturing piece
+    await placeAt(to);           // place at destination
+    await liftToRest();
+
+  } else if(type === 'castle'){
+    const rank  = from[1];
+    let rookFrom, rookTo;
+    if(to[0] === 'g'){ rookFrom='h'+rank; rookTo='f'+rank; }
+    else             { rookFrom='a'+rank; rookTo='d'+rank; }
+    // Move rook first then king
+    await pickFrom(rookFrom);
+    await placeAt(rookTo);
+    await pickFrom(from);        // king
+    await placeAt(to);
+    await liftToRest();
+
+  } else if(type === 'enpassant'){
+    const capturedPawn = extra || (to[0]+from[1]);
+    await pickFrom(capturedPawn);
+    await dropAtZone('capture');
+    await pickFrom(from);
+    await placeAt(to);
+    await liftToRest();
+
+  } else if(type === 'promotion'){
+    await pickFrom(from);        // pick pawn
+    await dropAtZone('capture'); // remove pawn
+    // Pick promoted piece from reserve zone
+    const resZ = state.zones.reserve;
+    if(!resZ) throw new Error('reserve zone not set');
+    await moveHorizontal(resZ);
+    await lowerArm(resZ);
+    await gripCloseAction();
+    await raiseArm();
+    await placeAt(to);           // place promoted piece
+    await liftToRest();
+  }
+}
+
+function testRestPosition(){
+  if(!state.zones.rest){ gameLog('Rest not set','err'); return; }
+  stopMove=false;
+  slewServo('shldr', state.zones.rest.shldr).then(()=>{
+    const ids=['elbow','wrpitch','base','wrroll','grip'];
+    ids.reduce((p,id)=>p.then(()=>slewServo(id,state.zones.rest[id]||state.angles[id])),Promise.resolve());
+  });
+}
+
+// Auto-update game info whenever state changes
+setInterval(updateGameInfo, 2000);
+updateGameInfo();
+
+</script>
+</body>
+</html>
