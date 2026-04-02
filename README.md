@@ -1,1 +1,0 @@
-# VYUHA-2.0-chess-robotic-arm-
