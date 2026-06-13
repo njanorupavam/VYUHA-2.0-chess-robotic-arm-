@@ -73,10 +73,6 @@ This project underwent significant iteration to reach its current robustness. He
 flowchart LR
     A[V1: ROS 2 + YOLO] -->|Lighting Issues| B(V2: absdiff + WebSocket)
     B -->|Flaky Browser dependency| C{V3: ROS 2 + absdiff}
-    
-    style A fill:#f9d0c4,stroke:#333,stroke-width:2px
-    style B fill:#f9f0c4,stroke:#333,stroke-width:2px
-    style C fill:#d4f9c4,stroke:#333,stroke-width:4px
 
     subgraph " "
     A
@@ -125,13 +121,6 @@ graph TD
     SF -->|/black_move| Robo
     Robo -->|S<pin>:<pulse_us>| Pico
     Pico -->|PWM Signal| Arm((Arm Moves))
-
-    style Cam fill:#ececff,stroke:#9370db
-    style Vis fill:#e6f3ff,stroke:#4169e1
-    style SF fill:#f9f0ff,stroke:#8a2be2
-    style Robo fill:#fff0f5,stroke:#db7093
-    style Pico fill:#f0fff0,stroke:#2e8b57
-    style Arm fill:#fffaf0,stroke:#ff8c00
 ```
 
 ---
