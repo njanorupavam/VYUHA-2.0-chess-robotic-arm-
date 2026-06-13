@@ -1,6 +1,6 @@
 <div align="center">
 
-# ♟️ Chess Robot Arm
+# ♟️ VYUHA 2.0 - Chess Robotic Arm
 
 ### *ROS2-based real-time system for autonomous chess play using vision, engine decisions, and robotic control.*
 ![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=for-the-badge&logo=python&logoColor=white)
@@ -15,6 +15,11 @@
 ![Chess Robot Arm](demo/arm.jpg)
 
 </div>
+
+---
+
+## 📌 Executive Summary
+**VYUHA 2.0** is an intelligent, physical chess-playing robot. Unlike digital-only engines, this system observes a real, physical board using an overhead camera, understands the game state using OpenCV, computes its next move using the powerful Stockfish engine, and physically executes its strategy using a 5-DOF robotic arm driven by a Raspberry Pi Pico—all orchestrated smoothly via a decoupled ROS 2 architecture.
 
 ---
 
@@ -33,42 +38,55 @@ A system that watches a real chess board, understands the move, and physically r
 - 🦾 **Acts**  
   A state machine (`PICK → LIFT → MOVE → PLACE → HOME`) converts moves into calibrated servo actions via the Raspberry Pi Pico.
 
-All components communicate through ROS2, forming a clean perception → decision → actuation pipeline.
+All components communicate through ROS 2, forming a clean perception → decision → actuation pipeline.
+
 ---
 
 ## 🎬 Demo
 
-**Vision system detecting your move and highlighting the arm's response:**
+### Live Execution
+Watch VYUHA 2.0 in action executing a move dynamically:
+<br/>
+<video src="demo/demo.mp4" controls="controls" width="100%" autoplay loop></video>
 
-![Vision Output](demo/vision_output.png)
-
-> 🟠 Orange = your move (YOU-T) &nbsp;|&nbsp; 🟢 Green = arm's response (ARM-F → ARM-T)
+*(Note: Gripper calibration was still in progress during this recording — full pick-and-place is more refined in the current system.)*
 
 ---
 
+### Vision System & Node Pipeline
+**Vision system detecting your move and highlighting the arm's response:**
+![Vision Output](demo/vision_output.png)
+> 🟠 Orange = your move (YOU-T) &nbsp;|&nbsp; 🟢 Green = arm's response (ARM-F → ARM-T)
+
 **Full ROS 2 pipeline firing in real time — Stockfish responding, arm executing:**
-
 ![ROS2 Pipeline](demo/ros_pipeline.png)
-
 > Left: `stockfish_node` receiving white move → computing black response
 > Right: `robot_arm_node` loading angles from JSON → slewing all 6 servos through the full state machine
 
 ---
 
-## 🔄 The Journey — 3 Versions
+## 🔄 The Journey — Architectural Evolution
 
-This project didn't come out perfectly on the first try. Here's what actually happened:
+This project underwent significant iteration to reach its current robustness. Here's how the architecture evolved:
 
-```
-V1 ──────────────────────────────────────────────────────────── V3
-ROS 2 + YOLO              absdiff + WebSocket          ROS 2 + absdiff
-      │                           │                           │
-      │  YOLO failed on           │  WebSocket was            │  Clean. Reliable.
-      │  inconsistent             │  flaky — browser          │  No browser.
-      │  lighting                 │  had to stay open         │  No WebSocket.
-      ▼                           ▼                           ▼
-  Vision scrapped            Arm moves! ✅              Full pipeline ✅
-  ROS arch kept ✅           absdiff kept ✅             Ships on Linux
+```mermaid
+flowchart LR
+    A[V1: ROS 2 + YOLO] -->|Lighting Issues| B(V2: absdiff + WebSocket)
+    B -->|Flaky Browser dependency| C{V3: ROS 2 + absdiff}
+    
+    style A fill:#f9d0c4,stroke:#333,stroke-width:2px
+    style B fill:#f9f0c4,stroke:#333,stroke-width:2px
+    style C fill:#d4f9c4,stroke:#333,stroke-width:4px
+
+    subgraph " "
+    A
+    end
+    subgraph " "
+    B
+    end
+    subgraph " Final Stable Pipeline "
+    C
+    end
 ```
 
 | Version | Vision | Communication | Outcome |
@@ -77,142 +95,88 @@ ROS 2 + YOLO              absdiff + WebSocket          ROS 2 + absdiff
 | [V2 — Working System](v2_working/) | absdiff | WebSocket + HTML | ✅ Arm physically moves pieces |
 | [V3 — ROS 2 Final](v3_ros2_final/) | absdiff | ROS 2 topics | ✅ Full clean pipeline on Linux |
 
-The `stockfish_node.py` written in V1 was **never changed** — it was right from the start. The state machine concept from V1's `robot_arm_node.py` carried all the way to V3, just extended with real hardware integration.
-
 ---
-
-## 🔧 Calibration Tool
-
-Before the arm could play a single game, every one of the **64 squares** had to be manually calibrated. We built a custom browser-based calibration tool from scratch — one of the most critical engineering decisions of the project.
-
-### How it worked
-
-```
-1. Open chess_arm_calibrator.html in browser
-2. Connect to pc_serial_bridge.py via WebSocket
-3. Click a square on the 8×8 grid (e.g. E4)
-4. Use servo sliders → arm moves in real time
-5. Physically position arm over that square
-6. Click "Save This Square" → angles written to JSON
-7. Repeat for all 64 squares + special zones
-8. Export JSON → used by arm executor forever after
-```
-
-### Tool Features
-
-| Tab | What it does |
-|---|---|
-| **Servo Control** | Individual slider for each of 6 servos with live PWM readout |
-| **Board Squares** | 8×8 clickable grid — green dot = calibrated, progress bar shows completion |
-| **Special Zones** | Rest position, capture drop zone, pawn promotion reserve |
-| **Safe Limits** | Min/max angle per servo — prevents mechanical damage from bad values |
-| **Slew Speed** | ms-per-degree speed for each servo — tune smoothness vs. time |
-| **Sequencer** | Test full move sequences: Normal, Capture, Castling, En Passant, Promotion |
-
----
-
-**Servo Control — 6 sliders, live PWM feedback for all joints**
-![Servo Control](demo/calib_servo_control.png)
-
----
-
-**Board Squares — all 64 squares calibrated, progress tracked**
-![Board Squares](demo/calib_board_squares.png)
-
----
-
-**Special Zones — Rest position, Capture zone, Promotion reserve**
-![Special Zones](demo/calib_special_zones.png)
-
----
-
-**Sequencer — test every move type before going live**
-![Sequencer](demo/calib_sequencer.png)
-
----
-
-> The calibration data is exported as `chess_arm_calib.json` — a portable file the ROS arm node reads directly. No recalibration needed between sessions.
-
----
-
-### System Overview
-
-A real-time pipeline where vision detects a move, a chess engine computes the response, and a robotic arm executes it through a calibrated state machine.
 
 ## ⚡ System Pipeline (V3)
 
-```
- ┌──────────────┐     HTTP      ┌──────────────────────┐
- │ 📱 IP Webcam │ ────────────▶│   chess_vision.py    │
- └──────────────┘               │                      │
-                                │  cv2.absdiff detect  │
-                                │  64-square grid diff │
-                                │  detect: e2 → e4     │
-                                └──────────┬───────────┘
-                                           │ /white_move
-                                           ▼
-                                ┌──────────────────────┐
-                                │   stockfish_node     │  ROS 2 Node
-                                │                      │
-                                │  python-chess valid  │
-                                │  Stockfish UCI call  │
-                                │  reply:   c7 → c5    │
-                                └──────────┬───────────┘
-                                           │ /black_move
-                                           ▼
-                                ┌──────────────────────┐
-                                │   robot_arm_node     │  ROS 2 Node
-                                │                      │
-                                │  loads calib JSON    │
-                                │  PICK→LIFT→MOVE      │
-                                │  →PLACE→HOME         │
-                                │  slews each servo    │
-                                └──────────┬───────────┘
-                                           │ S<pin>:<pulse_us>
-                                           ▼
-                                ┌──────────────────────┐
-                                │  Raspberry Pi Pico   │
-                                │  50Hz PWM output     │
-                                │  500–2500µs range    │
-                                └──────────┬───────────┘
-                                           │
-                                           ▼
-                                     🦾 Arm moves
+The architecture emphasizes modularity through decoupled ROS 2 nodes:
+
+```mermaid
+graph TD
+    Cam[📱 IP Webcam] -->|HTTP Stream| Vis[chess_vision.py]
+    
+    subgraph "Perception"
+    Vis[👁️ chess_vision.py<br/>cv2.absdiff detect]
+    end
+    
+    subgraph "Decision (ROS 2 Node)"
+    SF[🧠 stockfish_node<br/>Stockfish UCI & python-chess]
+    end
+    
+    subgraph "Execution (ROS 2 Node)"
+    Robo[🦾 robot_arm_node<br/>JSON Calib + State Machine]
+    end
+    
+    subgraph "Hardware Controller"
+    Pico[Raspberry Pi Pico<br/>50Hz PWM Output]
+    end
+
+    Vis -->|/white_move| SF
+    SF -->|/black_move| Robo
+    Robo -->|S<pin>:<pulse_us>| Pico
+    Pico -->|PWM Signal| Arm((Arm Moves))
+
+    style Cam fill:#ececff,stroke:#9370db
+    style Vis fill:#e6f3ff,stroke:#4169e1
+    style SF fill:#f9f0ff,stroke:#8a2be2
+    style Robo fill:#fff0f5,stroke:#db7093
+    style Pico fill:#f0fff0,stroke:#2e8b57
+    style Arm fill:#fffaf0,stroke:#ff8c00
 ```
 
 ---
 
 ## ⚠️ Engineering Challenges
 
-- **Reliable move detection under real-world conditions**  
-  Initial YOLO-based approach failed due to lighting variability. Switched to a deterministic frame differencing method with a fixed camera and calibrated grid.
+Bringing this hardware-software integration to life was a massive engineering challenge:
 
-- **Electrical reliability & hardware failures**  
-  Faced ground leakage issues that damaged an Arduino and stressed multiple high-torque servos. Required careful power isolation and stable supply selection beyond standard lab adapters.
+> [!WARNING]
+> **Electrical & Mechanical Stress**  
+> We faced ground leakage issues that damaged an Arduino and stressed high-torque servos. We solved this with careful power isolation and selecting stable, heavy-duty power supplies. We also tuned slew speeds (ms/°) for each servo to prevent gear slipping and maintain stability under load.
 
-- **Mechanical limitations under load**  
-  Larger servos experienced gear slipping and instability under load, requiring adjustments in motion strategy and load distribution.
+> [!IMPORTANT]
+> **Vision Reliability (YOLO vs absdiff)**  
+> Initial YOLO-based piece detection failed due to lighting variability. We pivoted to a much more deterministic frame differencing method (`cv2.absdiff`) with a fixed overhead camera and calibrated grid, achieving near 100% detection reliability.
 
-- **Precise motion tuning**  
-  Determining optimal slew speeds (ms/°) for each servo was critical to balance speed, smoothness, and mechanical safety.
+> [!NOTE]
+> **Collision-Free Path Planning**  
+> Physical chess pieces get in the way! We implemented sequential motion planning to avoid knocking over adjacent pieces during complex pick-and-place maneuvers.
 
-- **Collision-free movement planning**  
-  Sequential motion planning was required to avoid knocking over adjacent chess pieces during pick-and-place operations.
+> [!TIP]
+> **Decoupled Architecture**  
+> By utilizing a ROS 2 pub/sub model, the perception, decision, and control modules were isolated. If the vision node fails, the robot node safely idles.
 
-- **Mapping board state to physical coordinates**  
-  Required manual calibration of all 64 squares and special zones, stored as reusable JSON data.
+---
 
-- **System synchronization**  
-  Ensuring correct sequencing between vision detection, move validation (`python-chess`), and execution to prevent invalid or duplicate moves.
+## 🔧 Calibration Tool
 
-- **System decoupling and communication**  
-  Used ROS2 pub/sub to isolate perception, decision, and control modules, avoiding tight coupling across the system.
+Before the arm could play a single game, every one of the **64 squares** had to be manually calibrated. We built a custom browser-based calibration tool from scratch.
 
-  ---
+### Tool Features
+- **Servo Control**: Individual slider for each of 6 servos with live PWM readout.
+- **Board Squares**: 8×8 clickable grid tracking completion.
+- **Special Zones**: Rest position, capture drop zone, pawn promotion reserve.
+- **Safe Limits**: Min/max angle per servo — prevents mechanical damage.
+- **Slew Speed**: ms-per-degree speed for each servo to tune smoothness.
+- **Sequencer**: Test full move sequences before going live.
 
-## 🛠️ Hardware
+*(Screenshots of the tool can be found in the `demo/` directory)*
 
-```
+---
+
+## 🛠️ Hardware Specifications
+
+```text
 5-DOF Robotic Arm
 ├── Base          MG995  (GP0) ── 360° rotation
 ├── Shoulder      MG995  (GP1) ── main reach
@@ -223,56 +187,9 @@ A real-time pipeline where vision detects a move, a chess engine computes the re
 
 Microcontroller : Raspberry Pi Pico
 Protocol        : USB Serial @ 115200 baud
-Command format  : S<pin>:<pulse_us>  e.g. S0:1500
 PWM frequency   : 50Hz (standard hobby servo)
 Pulse range     : 500µs (0°) → 2500µs (180°)
-
 Camera          : Android phone running IP Webcam app
-                  Overhead fixed mount — deterministic ROI
-```
-
----
-
-## 🗂️ Repository Structure
-
-```
-chess-robot-arm/
-│
-├── 📄 README.md
-│
-├── 🎬 demo/                         ← all media
-│   ├── arm.jpg                      ← hero photo
-│   ├── vision_output.png            ← vision detection screenshot
-│   ├── ros_pipeline.png             ← ROS terminals screenshot
-│   ├── calib_servo_control.png      ← calibration tool screenshots
-│   ├── calib_board_squares.png
-│   ├── calib_special_zones.png
-│   ├── calib_sequencer.png
-│   └── demo.mp4                     ← arm moving video
-│
-├── 📁 v1_ros2_initial/              ← Version 1: ROS 2 + YOLO
-│   └── chess_ros_pkg/
-│       ├── stockfish_node.py        ← ✅ still used in V3 unchanged
-│       ├── robot_arm_node.py        ← mock state machine
-│       └── bridge_node.py
-│
-├── 📁 v2_working/                   ← Version 2: first working system
-│   ├── chess_vision.py              ← absdiff + WebSocket
-│   ├── pc_serial_bridge.py          ← WebSocket hub
-│   ├── chess_arm_calibrator.html    ← custom calibration tool
-│   ├── chess_arm_calib.json         ← 64-square calibration data
-│   └── pico_servo_listener.py       ← Pico firmware
-│
-├── 📁 v3_ros2_final/                ← Version 3: final system
-│   ├── chess_vision.py              ← absdiff + ROS 2 publisher
-│   ├── chess_arm_calib.json         ← same calibration, reused
-│   ├── pico_servo_listener.py       ← same Pico firmware
-│   └── chess_ros_pkg/
-│       ├── stockfish_node.py        ← unchanged from V1
-│       └── robot_arm_node.py        ← JSON + serial + state machine
-│
-└── 📁 docs/
-    └── architecture.md
 ```
 
 ---
@@ -281,8 +198,8 @@ chess-robot-arm/
 
 ```bash
 # Clone
-git clone https://github.com/Adi-gyt/chess-robot-arm.git
-cd chess-robot-arm
+git clone https://github.com/njanorupavam/VYUHA-2.0-chess-robotic-arm-.git
+cd VYUHA-2.0-chess-robotic-arm-
 
 # Install Python dependencies
 pip install opencv-python numpy chess requests pyserial
@@ -315,55 +232,19 @@ ros2 topic pub --once /white_move std_msgs/msg/String "{data: 'e2e4'}"
 
 ---
 
-## 📐 Calibration Data Format
-
-Every square stores 6 servo angles:
-
-```json
-"e2": { "base":80, "shldr":38, "elbow":45, "wrpitch":36, "wrroll":18, "grip":5 },
-"e4": { "base":81, "shldr":54, "elbow":70, "wrpitch":33, "wrroll":18, "grip":5 }
-```
-
-Special zones:
-```json
-"zones": {
-  "rest":    { "base":143, "shldr":110, "elbow":124, "wrpitch":90, "wrroll":17, "grip":5 },
-  "capture": { "base":153, "shldr":95,  "elbow":112, "wrpitch":46, "wrroll":17, "grip":5 }
-}
-```
-
-Slew speeds (ms per degree — controls smoothness):
-```json
-"slew": { "base":40, "shldr":40, "elbow":40, "wrpitch":40, "wrroll":40, "grip":40 }
-```
-
----
-
-## 🔑 Engineering Highlights
+## 🔑 Engineering Highlights for the Panel
 
 | Concept | Implementation |
 |---|---|
-| Deterministic vision | Fixed camera + fixed ROI → `cv2.absdiff` works every time |
-| Decoupled architecture | ROS 2 pub/sub — nodes never call each other directly |
-| Safety-first design | No move executes without `python-chess` legal move validation |
-| State machine | `IDLE→PICK→LIFT→MOVE→PLACE→HOME` with error handling at every step |
-| Smooth servo control | Degree-by-degree slewing at configurable ms/° — no jerking |
-| Portable calibration | JSON export/import — calibrate once, use forever |
-| Custom tooling | Built a full browser calibration app rather than hardcoding values |
+| **Deterministic Vision** | Fixed camera + fixed ROI ensures `cv2.absdiff` works every time. |
+| **Decoupled Architecture** | ROS 2 pub/sub — nodes never block each other directly. |
+| **Safety-First Design** | No physical move executes without `python-chess` legal validation. |
+| **State Machine Control** | `IDLE→PICK→LIFT→MOVE→PLACE→HOME` with resilient error handling. |
+| **Custom Tooling** | Developed a full browser calibration app to avoid hardcoding values. |
 
 ---
 
-## 🎥 Demo Video
-
-Watch the robotic arm executing a move:
-
-👉 https://github.com/Adi-gyt/chess-robot-arm/raw/main/demo/demo.mp4
-
-> Note: Gripper calibration was still in progress during this recording — full pick-and-place is more refined in the current system.
-
----
-
-## 🧾 One Line
+## 🧾 One Line Summary
 
 > *A modular chess-playing robotic system — vision detects, Stockfish decides, ROS 2 coordinates, the arm executes.*
 
@@ -373,6 +254,6 @@ Watch the robotic arm executing a move:
 
 Made with frustration, iteration, and too much coffee ☕
 
-**[⭐ Star this repo](https://github.com/Adi-gyt/chess-robot-arm)** if you find it interesting!
+**[⭐ Star this repo](https://github.com/njanorupavam/VYUHA-2.0-chess-robotic-arm-)** if you find it interesting!
 
 </div>
