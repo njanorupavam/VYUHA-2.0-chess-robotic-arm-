@@ -47,7 +47,7 @@ All components communicate through ROS 2, forming a clean perception → decisio
 ### Live Execution
 Watch VYUHA 2.0 in action executing a move dynamically:
 <br/>
-<video src="demo/demo.mp4" controls="controls" width="100%" autoplay loop></video>
+https://github.com/njanorupavam/VYUHA-2.0-chess-robotic-arm-/raw/main/demo/demo.mp4
 
 *(Note: Gripper calibration was still in progress during this recording — full pick-and-place is more refined in the current system.)*
 
